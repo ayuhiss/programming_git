@@ -1,0 +1,58 @@
+/*** executing room ***/
+
+/* load */
+load("schoof_v4.rr")$
+
+
+/* Example 1 */
+/* Input */
+Char = 19$ /* prime */
+Defpoly_FF = x$
+EC = newvect(2,[2,1])$
+/* compute */
+N = schoof(EC,Char,Defpoly_FF)$
+/* Output */
+print("\nExample 1:")$
+print("Char = ",0)$print(Char)$
+print("Defpoly_FF =",0)$print(Defpoly_FF)$
+print("EC = ",0)$print(EC)$
+print("N = ",0)$print(N)$
+print("\n")$
+
+/* Example 2 */
+/* Input */
+Char = 101$ /* prime */
+Defpoly_FF = x$
+EC = newvect(2,[3,4])$
+/* compute */
+N = schoof(EC,Char,Defpoly_FF)$
+/* Output */
+print("\nExample 2:")$
+print("Char = ",0)$print(Char)$
+print("Defpoly_FF =",0)$print(Defpoly_FF)$
+print("EC = ",0)$print(EC)$
+print("N = ",0)$print(N)$
+print("\n")$
+
+/* Example 3 */
+/* Input */
+Char = 1031$ /* prime */
+Defpoly_FF = x$
+EC = newvect(2,[11,3])$
+/* compute */
+N = schoof(EC,Char,Defpoly_FF)$
+/* Output */
+print("\nExample 3:")$
+print("Char = ",0)$print(Char)$
+print("Defpoly_FF =",0)$print(Defpoly_FF)$
+print("EC = ",0)$print(EC)$
+print("N = ",0)$print(N)$
+print("\n")$
+
+
+
+
+/* command in pari/GP
+E = ellinit([a,b],p); N = ellcard(E);
+*/
+end$

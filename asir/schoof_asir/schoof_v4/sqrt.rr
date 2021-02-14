@@ -1,0 +1,297 @@
+/* compute a root of a polynomial over prime field */
+/*
+    Input:
+        F: univariate polynomial over Fp.
+            we allow that F has no roots over Fp.
+        Char: integer (prime),
+                characteristic of base field.
+        Mode: integer,
+                0 or 1 or 2.
+    Output:
+        Root: integer or string,
+                if F has no roots over Fp, output is "noroot".
+                if F has at least one root over Fp,
+                    Mode is 0, then return 1,
+                    Mode is 1, then return one of the roots,
+                    Mode is 2, then return a list which includes all roots.
+*/
+def uniroot_ff (F, Char, Mode) {
+    /* set finite field */
+    setmod_ff(Char);
+    /* check that F has at least one root over Fp */
+    Fpoly = simp_ff(F);
+    Charpoly = simp_ff(var(Fpoly)^Char-var(Fpoly));
+    GCD = gcd(Fpoly,Charpoly);
+    if (deg(GCD,var(GCD)) == 0) {
+        /* if F has no roots over Fp */
+        return "noroot";
+    } else {
+        /* if F has at least one root over Fp */
+        if (Mode == 0) {
+            return 1;
+        } else {
+            L = []; /* L includes all roots */
+            /* compute roots */
+            Fact = fctr_ff(GCD);
+                    /* we rarely have the following cause unknown error;
+                            internal error (SEGV)
+                            stopped in monic_randpoly_ff at line 549 in file "/home/ayuhiss/OpenXM/lib/asir/fff"
+                            549 S += random_ff()*V^I;
+                    */
+            for (I = 0; I < length(Fact); I++) {
+                if (deg(Fact[I][0],var(Fact[I][0])) == 1) {
+                    if (Mode == 1) {
+                        /* if Mode = 1, return a root */
+                        return simp_ff(var(Fact[I][0])-Fact[I][0]);
+                    } else {
+                        /* if Mode = 2, add to the list */
+                        L = cons(simp_ff(var(Fact[I][0])-Fact[I][0]),L);
+                    }
+                } else {}
+            }
+            /* output */
+            if (L == []) {
+                return "noroot";
+            } else {
+                return L;
+            }
+        }
+    }
+}
+
+
+/* compute r,s s.t. p-1=s*2^r */
+/*
+    Input:
+        P: integer (>2, prime)
+    Output:
+        L: list,
+            R: integer,
+            S: integer.
+*/
+def decomp_r_s (P) {
+    Q = P-1;
+    R = 0;
+    S = 0;
+    /* repeat dividing 2 */
+    while (Q % 2 == 0) {
+        Q = Q/2 ;
+        R++;
+    }
+    S = Q;
+    return [R,S];
+}
+
+
+/* quadratic residue test */
+/*
+    Input:
+        A: integer (>=0),
+        P: integer (odd prime).
+        // Note: if the type of inputs is finitefield,
+                you get error at "B=B%Q" //
+    Output:
+        Test: integer (1 or -1 or 0),
+                output (a/p), then,
+                if there is a quadratic residue for a mod p, return 1,
+                and if there is NOT, return -1,
+                and if p divides a, return 0.
+*/
+def quad_red_test(A,P) {
+    /* Preparation */
+    /* Note: if the type of inputs is finitefield,
+                you get error at "B=B%Q" */
+    B = A;
+    Q = P;
+    if (pari(isprime,Q) == -1){error("P is not prime!");} else {}
+    Test = 1;
+    /* repeat until B is -1,0,1,2 or product of odd primes */
+    while (1) {
+        /* if B >= Q, B is replaced by B%Q */
+        if (B >= Q) {
+            B = B % Q; /* restart */
+        } else {
+        /* if B < Q */
+            /* if B = 0, that is B|P, return 0 */
+            if (B == 0) { return 0; }
+            else {
+            /* if B != 0 */
+                /* if B = 1,2,-1 or a odd prime */
+                if (B == 1 || B == 2 || B == Q-1 || (pari(isprime,B) && B > 2)) {
+                    if (B == 1) { return Test; }
+                    else {
+                        if (B == 2) {
+                            if (Q % 8 == 1 || Q % 8 == 7) { return Test; }
+                            else { return Test*(-1); }
+                        } else {
+                            if (B == Q-1) { return Test*(-1); }
+                            else {
+                                /* if B is a odd prime, switch B and Q */
+                                if (B % 4 == 3 && Q % 4 == 3) {
+                                    Test = (-1)*Test;
+                                } else {}
+                                B_dush = B;
+                                B = Q;
+                                Q = B_dush;
+                            }
+                        }
+                    }
+                } else {
+                /* if B != 1 and 2 and -1 and a odd prime, decompose B = S*2^R */
+                /* and we output (B/Q) = (S/Q)*(2/Q)^R */
+                    Lrs = decomp_r_s(B+1);
+                    R = Lrs[0];
+                    S = Lrs[1];
+                    /* we use 2nd supplementary law of quadratic reciprocity*/
+                    /* (2/Q)=(-1)^((Q^2-1)/8) */
+                    if (Q % 8 == 1 || Q % 8 == 7) { Sup2 = 1; }
+                    else { Sup2 = -1; }
+                    Test = Sup2^R;
+                    if (S == 1 || S == Q-1 || (pari(isprime,S) && S > 2)) {
+                        /* switch S and B, and restart */
+                        B = S;
+                    } else {
+                        /* this case is the most naive, compute S^((Q-1)/2) */
+                        Test_dush = fast_exp_mod(S,(Q-1)/2,Q,0);
+                        if (Test_dush == 1) { Test_dush = 1; }
+                        else {
+                            if (Test_dush+1 == Q) { Test_dush = -1; }
+                            else{error("fail due to B^(Q-1) != 1 and -1 mod Q");}
+                        }
+                        return Test*Test_dush;
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+/* compute a square root of A in finite field
+    by using Tonelli-Shanks Algorithm,
+    computational complexity is O(log^2(p)) */
+/*
+    Input:
+        A: integer.
+        Char: integer (prime,>=5),
+            characteristic of base field.
+        Mode: integer,
+                if Mode = 0, we don't quadratic test,
+                if Mode = 1, we do    quadratic test.
+    Output:
+        X: integer or string,
+            if A is a quadratic residue, A = X^2 (mod Char),
+                which square roots is output is random,
+            otherwise, return "nonquad".
+*/
+def sqrt_ff_tonelli(A, Char, Mode) {
+    if (Mode == 1) {
+        /* check A is quadratic residue mod Char */
+        /* Note: if the type of inputs is finitefield,
+                you get error at "B=B%Q" */
+        Test = quad_red_test(A,Char);
+        if (Test == -1) {return "nonquad";}
+        else {
+            if(Test == 0) {return 0;}
+            else {/* if Test == 1, do continue */}
+        }
+    } else {/* we don't check A is quadratic residue mod Char */}
+
+    /* set the characteristic of finite field */
+    P = Char;
+
+    /* Divise into cases */
+    if (P % 4 == 3) {
+        X = fast_exp_mod(A,(P+1)/4,P,0);
+        return X;
+    } else {
+        if (P % 8 == 5) {
+            QuarRed = fast_exp_mod(A,(P-1)/4,P,0);
+            if (QuadRed == 1) {
+                X = fast_exp_mod(A,(P+3)/8,P,0);
+            } else {
+                X = fast_exp_mod(2,(P-1)/4,P,0)*fast_exp_mod(A,(P+3)/8,P,0);
+            }
+            return X;
+        } else {/* if P % 8 = 1, use Tonelli-Shanks Algorithm */}
+    }
+
+    /* Tonelli-Shanks Algorithm */
+    /* compute r,s s.t. p-1=s*2^r */
+    Lrs = decomp_r_s(Char);
+    R = Lrs[0];
+    S = Lrs[1];
+
+    /* find non-quadratic residue n mod P */
+    Test = 1;
+    N = 2;
+    while (Test == 1) {
+        Test = quad_red_test(N,P);
+        if (Test == -1) {
+            break;
+        } else {
+            if ( Test == 0) {
+                error("we could not find quadratic residue mod P");
+            } else {
+                /* if Test = 1, repeat */
+                N = pari(nextprime,N+1);
+            }
+        }
+    }
+
+    /* compute M = N^S */
+    M = fast_exp_mod(N,S,P,0);
+
+    /* compute B,U,X */
+        /* Step 0 */
+    B = fast_exp_mod(A,S,P,0);
+    X = fast_exp_mod(A,(S+1)/2,P,0);
+    U = 0;
+    B_pow = B;
+    while (B_pow != 1) {
+        B_pow = fast_exp_mod(B_pow,2,P,0);
+        U++;
+    }
+
+        /* Step i */
+    while (U != 0) {
+        B = (fast_exp_mod(M,2^(R-U),P,0) * B) % P;
+        X = (fast_exp_mod(M,2^(R-U-1),P,0) * X) % P;
+        U = 0;
+        B_pow = B;
+        while (B_pow != 1) {
+            B_pow = fast_exp_mod(B_pow,2,P,0);
+            U++;
+        }
+    }
+    return X;
+}
+
+
+/* compute square root of A in finite field
+    by finding a root of x^2-A */
+/*
+    Input:
+        A: integer.
+        Char: integer (prime),
+            characteristic of base field.
+    Output:
+        Sqrt: integer or string
+            if A is a quadratic residue, A = Sqrt^2 (mod Char),
+            otherwise, return "nonquad".
+*/
+def sqrt_ff_quadpoly(A, Char) {
+    /* set finite field */
+    setmod_ff(Char);
+    /* check x^2-A has roots */
+    F = simp_ff(x^2 - A);
+    Root = uniroot_ff(F,Char,1);
+    if (Root == "noroot") {
+        return "nonquad";
+    } else {
+        return simp_ff(Root);
+    }
+}
+
+
+end$

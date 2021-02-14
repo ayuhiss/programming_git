@@ -1,0 +1,1031 @@
+/*** Schoof algorithm ***/
+/* only if the coefficients of EC
+    over finite field(Fq) are over base field(Fp) */
+/* ver 2: with precomputation division polynomials */
+
+
+/** sub function **/
+/* improve function "var" and "vars" */
+/*
+    Input:
+        F: polynomial
+    Output:
+        M: monopolynomial
+*/
+def varz(F) {
+    if (var(F) == 0) { return x; }
+    else { return var(F);}
+}
+def varsz(F) {
+    if (vars(F) == []) { return [x]; }
+    else { return vars(F);}
+}
+
+
+/* compute L-th "reduced" division polynomial of elliptic curve over finite field */
+/*
+    Input:
+        L: integer (>=3),
+                degree of div poly.
+        EC: vector (size: 2),
+                [a,b] are on (Fp)^2 and coefficients of elliptic curve over Fq,
+                i.e., weierstrass form of elliptic curve is y^2=x^3+a*x+b.
+        Char: integer (prime),
+                characteristic of base field.
+        Mode: 0 or 1,
+                you can choose between list or polynomial as output.
+    Output:
+        if Mode = 0,
+            Divpoly: univariate polynomial over FF,
+                    f_L which is L-th "reduced" division polynomial over FF,
+                    s.t. if P=(x,y) is in E[L] and not in E[2],
+                            then L*P=O if and only if f_L(x)=0.
+        if Mode = 1,
+            List: list (size: L+1)
+                    list of all the division polynomials of E,
+                    each rank of which is from 0 to L.
+                    however, 0-th one is 0, 1-st one is 1,
+                    2-nd one is 1.
+*/
+def divpoly(L, EC, Char, Mode) {
+    /* Caution: in the case that the caracteristic of this finite field Char
+        is enough small ((L^2-1)/2 >= Char), the degree of divpoly is larger
+        than Char, so you may have error some computation. */
+    if ((L^2-1)/2 >= Char) {
+        print("Caution: in the case that the caracteristic of
+        this finite field Char is enough small ((L^2-1)/2 >= Char),
+        the degree of divpoly is larger than Char, so you may have
+        error some computation.");
+    }
+
+    /* set finite field */
+    setmod_ff(Char);
+
+    /* coefficients of EC */
+    A = EC[0];
+    B = EC[1];
+    ECpoly = simp_ff(x^3 + A*x + B);
+
+    /* compute reduced division polynomial */
+    /* Case: L <= 2 */
+    if (L <= 2) {
+        error("you should not be L <= 2");
+    } else {}
+
+    /* Case: 2 < L <= 4 */
+    List_Divpoly = [
+        simp_ff(0),
+        simp_ff(1),
+        simp_ff(1),
+        simp_ff(3*x^4+6*A*x^2+12*B*x-A^2),
+        simp_ff(2*(x^6+5*A*x^4+20*B*x^3-5*A^2*x^2-4*A*B*x-8*B^2-A^3))
+    ];
+    if (L <= 4) {
+        if (Mode == 0) {
+            return List_Divpoly[L];
+        } else {
+            return List_Divpoly;
+        }
+    } else {}
+
+    /* Case: L >= 5 */
+    Vec_Divpoly = newvect(L+1,List_Divpoly);
+    F_sq = simp_ff(16)*ECpoly^2;
+    N = 5;
+    while (N <= L) {
+        /* Case: N = 2M+1 */
+        if (N % 2 == 1) {
+            M = (N-1)/2;
+            /* Case: M is odd */
+            if (M % 2 == 1) {
+                Vec_Divpoly[N] = Vec_Divpoly[M+2]*Vec_Divpoly[M]^3
+                                    - F_sq*Vec_Divpoly[M-1]*Vec_Divpoly[M+1]^3;
+            } else { /* Case: M is even */
+                Vec_Divpoly[N] = F_sq*Vec_Divpoly[M+2]*Vec_Divpoly[M]^3
+                                    - Vec_Divpoly[M-1]*Vec_Divpoly[M+1]^3;
+            }
+        } else {
+        /* Case: N = 2M */
+        M = N/2;
+        Vec_Divpoly[N] = (Vec_Divpoly[M+2]*Vec_Divpoly[M-1]^2
+                            - Vec_Divpoly[M-2]*Vec_Divpoly[M+1]^2)*Vec_Divpoly[M];
+        }
+        N++;
+    }
+    /* Output */
+    if (Mode == 0) {
+        return Vec_Divpoly[L];
+    } else {
+        return vtol(Vec_Divpoly);
+    }
+}
+
+
+/* compute N*P, P is a point of elliptic curve over finite field(Fq) */
+/* non-used */
+/*
+    Input:
+        N: integer,
+        P: vector (size: 3) or 0,
+            homogeneous coodinates of a point of EC over FF.
+        EC: vector (size: 2),
+                [a,b] are in Fp and coefficients of elliptic curve,
+                i.e., weierstrass form of elliptic curve is y^2=x^3+a*x+b.
+    Output:
+        Q: vector (size: 3) or 0,
+            homogeneous coodinates of N*P.
+*/
+def ecm_times_ff (N, P, EC) {
+    /* Case: N = 0 */
+    if (N == 0) {
+        return 0;
+    } else {}
+
+    /* Case: P = 0 */
+    if (P == 0) {
+        return 0;
+    } else {}
+
+    /* Case: N != 0 and P != 0 */
+    /* we can improve on this part by the represent of N */
+    if (N > 0) { /* Case: N > 0 */
+        R = P;
+        M = N;
+    } else { /* Case: N < 0 */
+        R = ecm_chsgn_ff(P);
+        M = -N;
+    }
+    /* repeat plussing R */
+    Q = R;
+    for (I = 1; I < M; I++) {
+        Q = ecm_add_ff(Q,R,EC);
+    }
+    return Q;
+}
+
+
+/* extended Euclid algorithm for integer*/
+/*
+    Input:
+        A: integer.
+        B: integer.
+    Output:
+        V: vector (size: 3),
+            V=(Z,X,Y) s.t. A*X+B*Y=Z=GCD(A,B).
+*/
+def ext_igcd (A, B) {
+    R1 = A;
+    X1 = 1;
+    X2 = 0;
+    R2 = B;
+    X2 = 0;
+    Y2 = 1;
+    while (R2 != 0) {
+        R3 = R1 % R2;
+        Q = idiv(R1, R2);
+        X3 = X1 - Q * X2;
+        Y3 = Y1 - Q * Y2;
+        R1 = R2;
+        R2 = R3;
+        X1 = X2;
+        X2 = X3;
+        Y1 = Y2;
+        Y2 = Y3;
+    }
+    return newvect(3,[R1, X1, Y1]);
+}
+
+
+/* Chinese Remainder Theory */
+/*
+    Input:
+        V: vector,
+            V = [[a1 n1] [a2 n2] ... [am nm]],
+            each (ni,nj) is coprime,
+            we solve equations that x1 = a1 (mod n1),..,xm = am (mod nm).
+    Output:
+        S: vector (size: 2),
+            S = [as ns], as is the root of the equations,
+            ns is n1*n2*...*nm.
+*/
+def crt (V) {
+    A1 = V[0][0];
+    N1 = V[0][1];
+    for ( I = 0; I+1 < length(V); I++) {
+        A2 = V[I+1][0];
+        N2 = V[I+1][1];
+        EEA = ext_igcd(N1,N2);
+        N3 = N1*N2;
+        A3 = (A1*N2*EEA[2]+A2*N1*EEA[1])%N3;
+        A1 = A3;
+        N1 = N3;
+    }
+    return newvect(2,[A1%N1,N1]);
+}
+
+
+/* extended Euclid algorithm for unipoly over Fp */
+/*
+    Input:
+        A: univariate polynomial over Fp.
+        B: univariate polynomial over Fp.
+        Char: integer (prime),
+                characteristic of base field.
+    Output:
+        V: vector (size: 3),
+            V=(Z,X,Y) s.t. A*X+B*Y=Z=GCD(A,B).
+*/
+def ext_ugcd (A, B, Char) {
+    setmod_ff(Char);
+    R1 = simp_ff(A);
+    X1 = simp_ff(1);
+    X2 = simp_ff(0);
+    R2 = simp_ff(B);
+    X2 = simp_ff(0);
+    Y2 = simp_ff(1);
+    while (R2 != simp_ff(0)) {
+        Sqr = sqr(R1,R2);
+        Q  = Sqr[0];
+        R3 = Sqr[1];
+        X3 = X1 - Q * X2;
+        Y3 = Y1 - Q * Y2;
+        R1 = R2;
+        R2 = R3;
+        X1 = X2;
+        X2 = X3;
+        Y1 = Y2;
+        Y2 = Y3;
+    }
+    return newvect(3,[R1, X1, Y1]);
+}
+
+
+/* compute inverse of A(X) over Fp[X]/<R(X)> */
+/*
+    Input:
+        Char: integer (prime),
+                characteristic of base field.
+        R: univariate polynomial over Fp.
+        A: univariate polynomial over Fp.
+    Output:
+        B: univariate polynomial over Fp.
+            if there exist the inverse of A,
+                then output is B such that A*B = 1.
+            otherwise, that is GCD(A(X),R(X)) = 1,
+                output is "noinverse".
+*/
+def inv_unipoly (A, R, Char) {
+    setmod_ff(Char);
+    /* check that there exist the inverse of A,
+        that is, check that GCD(A(X),R(X)) = 1 */
+    V = ext_ugcd(R,A,Char);
+    if (deg(simp_ff(V[0]),varz(simp_ff(V[0]))) > 0) {
+        return "noinverse";
+    } else {
+        return simp_ff(V[2])/simp_ff(V[0]);
+    }
+}
+
+
+/* compute x^N over Fp[x]/<F(X)>. */
+/*
+    Input:
+        Char: integer (prime),
+                characteristic of base field.
+        N: integer.
+        F: univariate polynomial over Fp.
+    Output:
+        R: univariate polynomial over Fp.
+            R is equal to x^N reduced by F(X).
+*/
+/* non-used */
+def red_xN_by_F (N, F, Char) {
+    /* set finite field */
+    setmod_ff(Char);
+    /* compute reducing */
+    R = urem(simp_ff(varz(F))^N, simp_ff(F));
+    return R;
+}
+
+
+/* compute Frobenius map from P = (X(x),y*Y(x)) */
+/*
+    Input:
+        X: univariate polynomial,
+            X(x) is the polynomial which represents the x-coodinate of P.
+        Char: integer (prime),
+                characteristic of base field.
+        Defpoly_FF: univariate polynomial over FF,
+                        definition polynomial of FF.
+                        if FF is prime field, then Defpoly_FF = x.
+        R: univariate polynomial over Fp.
+    Output:
+        Xqn: univariate polynomial over Fp.
+                Frob(P) = (Xqn(x),y*Yqn(x))
+*/
+def frob_x(X, Char, Defpoly_FF, R) {
+    /* set finite field */
+    setmod_ff(Char);
+    /* compute order of field */
+    Order = Char^deg(Defpoly_FF,varz(Defpoly_FF));
+    /* repeat mutipling */
+    Xp = simp_ff(X);
+    for (I = 1; I < Order; I++) {
+        Xp = Xp * X;
+        Xp = urem(Xp,R);
+    }
+    return simp_ff(Xp);
+}
+
+
+/* compute Frobenius map from P = (X(x),y*Y(x)) */
+/*
+    Input:
+        Y: univariate polynomial,
+            Y(x) is the polynomial which represents the y-coodinate of P.
+        EC: vector (size: 2),
+                [a,b] are on (Fp)^2 and coefficients of elliptic curve over Fq,
+                i.e., weierstrass form of elliptic curve is y^2=x^3+a*x+b.
+        Char: integer (prime),
+                characteristic of base field.
+        Defpoly_FF: univariate polynomial over FF,
+                        definition polynomial of FF.
+                        if FF is prime field, then Defpoly_FF = x.
+        R: univariate polynomial over Fp.
+    Output:
+        Yqn: univariate polynomial over Fp.
+                Frob(P) = (Xqn(x),y*Yqn(x))
+*/
+def frob_y(Y, EC, Char, Defpoly_FF, R) {
+    /* set finite field */
+    setmod_ff(Char);
+    /* compute order of field */
+    Order = Char^deg(Defpoly_FF,varz(Defpoly_FF));
+    /* repeat multipling */
+    ECpoly = simp_ff(varz(Y)^3+EC[0]*varz(Y)+EC[1]);
+    Yp = simp_ff(Y);
+    for (I = 1; I < Order; I++) {
+        if (I % 2 == 1) {
+            Yp = urem(Yp*Y,R) * ECpoly;
+        } else {
+            Yp = Yp * Y;
+        }
+        Yp = urem(Yp,R);
+    }
+    return simp_ff(Yp);
+}
+
+
+/* compute X(x), which represent (X(x),y*Y(x)) = n*(x,y) over Fp[x]/<R(x)> */
+/*
+    Input:
+        N: integer (>= 1).
+        EC: vector (size: 2),
+                [a,b] are on (Fp)^2 and coefficients of elliptic curve over Fq,
+                i.e., weierstrass form of elliptic curve is y^2=x^3+a*x+b.
+        Char: integer (prime),
+                characteristic of base field.
+        R: univariate polynomial over Fp,
+            {the roots of R} \cap {the root of N-th divpoly} = \emptyset.
+        List_Divpoly: list (size: L+1)
+                    list of all the division polynomials of E,
+                    each rank of which is from 0 to L.
+                    however, 0-th one is 0, 1-st one is 1,
+                    2-nd one is 1.
+    Output:
+        X: univariate polynomial over Fp.
+*/
+def n_times_x (N, EC, Char, R, List_Divpoly) {
+    /* set finite field */
+    setmod_ff(Char);
+    /* if N = 1 */
+    if (N == 1) {
+        return simp_ff(varz(R));
+    } else {}
+
+    /* if N >= 2 */
+    ECpoly = simp_ff(varz(R)^3+EC[0]*varz(R)+EC[1]);
+    /* compute division polynomials */
+    Vec_Divpoly = ltov(List_Divpoly);
+    /* if N is even */
+    if (N % 2 == 0) {
+        /*
+        X = varz(R) - (1/4)*Vec_Divpoly[N+1]*Vec_Divpoly[N-1]
+                        *inv_unipoly(ECpoly*(Vec_Divpoly[N]^2),R,Char);
+        */
+        X = varz(R) - (1/4)*urem(Vec_Divpoly[N+1]*Vec_Divpoly[N-1],R)
+                        *inv_unipoly(ECpoly*urem(Vec_Divpoly[N]^2,R),R,Char);
+        X = urem(X,R);
+    } else { /* if N is odd */
+        /*
+        X = varz(R) - 4*Vec_Divpoly[N+1]*Vec_Divpoly[N-1]
+                        *ECpoly*inv_unipoly(Vec_Divpoly[N]^2,R,Char);
+        */
+        X = varz(R) - 4*urem(Vec_Divpoly[N+1]*Vec_Divpoly[N-1],R)
+                        *ECpoly*inv_unipoly(urem(Vec_Divpoly[N]^2,R),R,Char);
+        X = urem(X,R);
+    }
+    return simp_ff(X);
+}
+
+
+/* compute Y(x), which represent (X(x),y*Y(x)) = n*(x,y) over Fp[x]/<R(x)> */
+/*
+    Input:
+        N: integer (>= 1).
+        EC: vector (size: 2),
+                [a,b] are on (Fp)^2 and coefficients of elliptic curve over Fq,
+                i.e., weierstrass form of elliptic curve is y^2=x^3+a*x+b.
+        Char: integer (prime),
+                characteristic of base field.
+        R: univariate polynomial over Fp.
+        List_Divpoly: list (size: L+1)
+                    list of all the division polynomials of E,
+                    each rank of which is from 0 to L.
+                    however, 0-th one is 0, 1-st one is 1,
+                    2-nd one is 1.
+    Output:
+        Y: univariate polynomial over Fp.
+*/
+def n_times_y (N, EC, Char, R, List_Divpoly) {
+    /* set finite field */
+    setmod_ff(Char);
+    /* if N = 1 */
+    if (N == 1) {
+        return simp_ff(1);
+    } else {}
+
+    /* if N >= 2 */
+    ECpoly = simp_ff(varz(R)^3+EC[0]*varz(R)+EC[1]);
+    /* compute division polynomials */
+    Vec_Divpoly = ltov(List_Divpoly);
+    /* if N is even */
+    if (N % 2 == 0) {
+        /*
+        Y = (1/16)*(Vec_Divpoly[N+2]*Vec_Divpoly[N-1]^2-Vec_Divpoly[N-2]*Vec_Divpoly[N+1]^2)
+                    *inv_unipoly(ECpoly^2*Vec_Divpoly[N]^3,R,Char);
+        */
+        Y = (1/16)*urem(Vec_Divpoly[N+2]*urem(Vec_Divpoly[N-1]^2,R)-Vec_Divpoly[N-2]*urem(Vec_Divpoly[N+1]^2,R),R)
+                    *inv_unipoly(ECpoly^2*urem(Vec_Divpoly[N]*urem(Vec_Divpoly[N]^2,R),R),R,Char);
+        Y = urem(Y,R);
+    } else { /* if N is odd */
+        /*
+        Y = urem((urem(urem(Vec_Divpoly[N+2],R)*urem(Vec_Divpoly[N-1]^2,R),R)-urem(urem(Vec_Divpoly[N-2],R)*urem(Vec_Divpoly[N+1]^2,R),R))
+                        *inv_unipoly(Vec_Divpoly[N]*urem(Vec_Divpoly[N]^2,R),R,Char)
+                    ,R);
+        */
+        Y = urem(Vec_Divpoly[N+2]*urem(Vec_Divpoly[N-1]^2,R)-Vec_Divpoly[N-2]*urem(Vec_Divpoly[N+1]^2,R),R)
+                *inv_unipoly(Vec_Divpoly[N]*urem(Vec_Divpoly[N]^2,R),R,Char);
+        Y = urem(Y,R);
+    }
+    return simp_ff(Y);
+}
+
+
+/* compute XS(x),YS(x) which satisfy (XS(x),y*YS(x)) = (XP(x),y*YP(x)) + (XQ(x),y*YQ(x)).
+    in this time, P=(XP,YP) and Q=(XQ,YQ) are in E[L], L is not 2. */
+/*
+    Input:
+        XP: univariate polynomial,
+            XP(x) is the polynomial which represents the x-coodinate of P.
+        YP: univariate polynomial,
+            YP(x) is the polynomial which represents the y-coodinate of P.
+        XQ: univariate polynomial,
+            XQ(x) is the polynomial which represents the x-coodinate of Q.
+        YQ: univariate polynomial,
+            YQ(x) is the polynomial which represents the y-coodinate of Q.
+        EC: vector (size: 2),
+                [a,b] are on (Fp)^2 and coefficients of elliptic curve over Fq,
+                i.e., weierstrass form of elliptic curve is y^2=x^3+a*x+b.
+        Char: integer (prime),
+                characteristic of base field.
+        R: univariate polynomial over Fp.
+    Output:
+        XS: univariate polynomial,
+            XS(x) is the polynomial which represents the x-coodinate of S = P + Q.
+        YS: univariate polynomial,
+            YS(x) is the polynomial which represents the y-coodinate of S = P + Q.
+*/
+def add_x_y(XP,YP,XQ,YQ,EC,Char,R) {
+    /* set finite field */
+    setmod_ff(Char);
+
+    ECpoly = x^3+EC[0]*x+EC[1];
+    Xp = urem(simp_ff(XP),simp_ff(R));
+    Yp = urem(simp_ff(YP),simp_ff(R));
+    Xq = urem(simp_ff(XQ),simp_ff(R));
+    Yq = urem(simp_ff(YQ),simp_ff(R));
+
+    /* if P = Q */
+    if (Xp == Xq && Yp == Yq) {
+        Lambda = (3*Xp^2+EC[0])*(1/2)*inv_unipoly(Yp,R,Char);
+        XS = urem(Lambda^2,R)*inv_unipoly(ECpoly,R,Char)-2*Xp;
+        XS = urem(XS,R);
+        YS = Lambda*(Xp-XS)*inv_unipoly(ECpoly,R,Char)-Yp;
+        YS = urem(YS,R);
+    } else {
+        /* if P != Q */
+        Lambda = (Yq-Yp)*inv_unipoly(Xq-Xp,R,Char);
+        Lambda = urem(Lambda,R);
+        XS = urem(Lambda^2,R)*ECpoly-Xq-Xp;
+        XS = urem(XS,R);
+        YS = Lambda*(Xp-XS)-Yp;
+        YS = urem(YS,R);
+    }
+    return [simp_ff(XS),simp_ff(YS)];
+}
+
+
+/* compute a root of a polynomial over prime field */
+/*
+    Input:
+        F: univariate polynomial over Fp.
+            we allow that F has no roots over Fp.
+        Char: integer (prime),
+                characteristic of base field.
+        Mode: integer,
+                0 or 1 or 2.
+    Output:
+        Root: integer or string,
+                if F has no roots over Fp, output is "noroot".
+                if F has at least one root over Fp,
+                    Mode is 0, then return 1,
+                    Mode is 1, then return one of the roots,
+                    Mode is 2, then return a list which includes all roots.
+*/
+def uniroot_ff (F, Char, Mode) {
+    /* set finite field */
+    setmod_ff(Char);
+    /* check that F has at least one root over Fp */
+    Fpoly = simp_ff(F);
+    Charpoly = simp_ff(var(Fpoly)^Char-var(Fpoly));
+    GCD = gcd(Fpoly,Charpoly);
+    if (deg(GCD,var(GCD)) == 0) {
+        /* if F has no roots over Fp */
+        return "noroot";
+    } else {
+        /* if F has at least one root over Fp */
+        if (Mode == 0) {
+            return 1;
+        } else {
+            L = []; /* L includes all roots */
+            /* compute roots */
+            Fact = fctr_ff(GCD);
+            for (I = 0; I < length(Fact); I++) {
+                if (deg(Fact[I][0],var(Fact[I][0])) == 1) {
+                    if (Mode == 1) {
+                        /* if Mode = 1, return a root */
+                        return simp_ff(var(Fact[I][0])-Fact[I][0]);
+                    } else {
+                        /* if Mode = 2, add to the list */
+                        L = cons(simp_ff(var(Fact[I][0])-Fact[I][0]),L);
+                    }
+                } else {}
+            }
+            if (L == []) {
+                return "noroot";
+            } else {
+                return L;
+            }
+        }
+    }
+}
+
+
+/* compute r,s s.t. p-1=s*2^r */
+/*
+    Input:
+        P: integer (>2, prime)
+    Output:
+        L: list,
+            R: integer,
+            S: integer.
+*/
+def decomp_r_s (P) {
+    Q = P-1;
+    R = 0;
+    S = 0;
+    while (Q % 2 == 0) {
+        Q = Q/2 ;
+        R++;
+    }
+    S = Q;
+    if (P-1 != S*(2^R)) { error("fail to compute r,s s.t. P-1=S*(2^R)."); }
+    return [R,S];
+}
+
+
+/* quadratic residue test */
+/*
+    Input:
+        A: integer (>=0),
+        P: integer (odd prime).
+        // Note: if the type of inputs is finitefield,
+                you get error at "B=B%Q" //
+    Output:
+        Test: integer (1 or -1 or 0),
+                output (a/p), then,
+                if there is a quadratic residue for a mod p, return 1,
+                and if there is NOT, return -1,
+                and if p divides a, return 0.
+*/
+def quad_red_test(A,P) {
+    /* Preparation */
+    /* Note: if the type of inputs is finitefield,
+                you get error at "B=B%Q" */
+    B = A;
+    Q = P;
+    if (pari(isprime,Q) == -1){error("P is not prime!");} else {}
+    Test = 1;
+    /* repeat until B is -1,0,1,2 or product of odd primes */
+    while (1) {
+        /* if B >= Q, B is replaced by B%Q */
+        if (B >= Q) {
+            B = B % Q; /* restart */
+        } else {
+        /* if B < Q */
+            /* if B = 0, that is B|P, return 0 */
+            if (B == 0) { return 0; }
+            else {
+            /* if B != 0 */
+                /* if B = 1,2,-1 or a odd prime */
+                if (B == 1 || B == 2 || B == Q-1 || (pari(isprime,B) && B > 2)) {
+                    if (B == 1) { return Test; }
+                    else {
+                        if (B == 2) {
+                            if (Q % 8 == 1 || Q % 8 == 7) { return Test*1; }
+                            else { return Test*(-1); }
+                        } else {
+                            if (B == Q-1) { return Test*(-1); }
+                            else {
+                                /* if B is a odd prime */
+                                if (B % 4 == 3 && Q % 4 == 3) {
+                                    Test = (-1)*Test;
+                                } else {}
+                                B_dush = B;
+                                B = Q;
+                                Q = B_dush;
+                            }
+                        }
+                    }
+                } else {
+                /* if B != 1 and 2 and -1 and a odd prime, decompose B = S*2^R */
+                /* and we output (B/Q) = (S/Q)*(2/Q)^R */
+                    Lrs = decomp_r_s(B+1);
+                    R = Lrs[0];
+                    S = Lrs[1];
+                    /* we use 2nd supplementary law of quadratic reciprocity*/
+                    /* (2/Q)=(-1)^((Q^2-1)/8) */
+                    if (Q % 8 == 1 || Q % 8 == 7) { Sup2 = 1; }
+                    else { Sup2 = -1; }
+                    Test = Sup2^R;
+                    if (S == 1 || S == Q-1 || (pari(isprime,S) && S > 2)) {
+                        B = S;
+                        /* go to point1 */
+                    } else {
+                        Test_dush = (S^(((Q-1)/2)))%Q;
+                        if (Test_dush == 1) { Test_dush = 1; }
+                        else {
+                            if (Test_dush+1 == Q) { Test_dush = -1; }
+                            else{error("fail due to B^(Q-1) != 1 and -1 mod Q");}
+                        }
+                        return Test*Test_dush;
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+/* compute a square root of A in finite field
+    by using Tonelli-Shanks Algorithm,
+    computational complexity is O(log^2(p)) */
+/*
+    Input:
+        A: integer.
+        Char: integer (prime,>=5),
+            characteristic of base field.
+        Mode: integer,
+                if Mode = 0, we don't quadratic test,
+                if Mode = 1, we do    quadratic test.
+    Output:
+        X: integer or string,
+            if A is a quadratic residue, A = X^2 (mod Char),
+                which square roots is output is random,
+            otherwise, return "nonquad".
+*/
+def sqrt_ff_tonelli(A, Char, Mode) {
+    if (Mode == 1) {
+        /* check A is quadratic residue mod Char */
+        /* Note: if the type of inputs is finitefield,
+                you get error at "B=B%Q" */
+        Test = quad_red_test(A,Char);
+        if (Test == -1) {return "nonquad";}
+        else {
+            if(Test == 0) {return 0;}
+            else {/* if Test == 1, do continue */}
+        }
+    } else {/* we don't check A is quadratic residue mod Char */}
+
+    /* set finite field */
+    setmod_ff(Char);
+    P = Char;
+
+    /* Divise into cases */
+    if (P % 4 == 3) {
+        X = simp_ff(A)^((P+1)/4);
+    } else {
+        if (P % 8 == 5) {
+            QuarRed = simp_ff(A)^((P-1)/4);
+            if (QuadRed == 1) {
+                X = simp_ff(A)^((P+3)/8);
+            } else {
+                X = simp_ff(2)^((P-1)/4)*simp_ff(A)^((P+3)/8);
+            }
+        } else {/* if P % 8 = 1, use Tonelli-Shanks Algorithm */}
+    }
+
+    /* Tonelli-Shanks Algorithm */
+    /* compute r,s s.t. p-1=s*2^r */
+    Lrs = decomp_r_s(Char);
+    R = Lrs[0];
+    S = Lrs[1];
+
+    /* find non-quadratic residue n mod P */
+    Test = 1;
+    N = 2;
+    while (Test == 1) {
+        Test = quad_red_test(N,P);
+        if (Test == -1) {
+            break;
+        } else {
+            if ( Test == 0) {
+                error("we could not find quadratic residue mod P");
+            } else {
+                /* if Test = 1, repeat */
+                N = pari(nextprime,N+1);
+            }
+        }
+    }
+
+    /* compute M = N^S */
+    M = simp_ff(N)^S;
+
+    /* compute B,U,X */
+        /* Step 0 */
+    B = simp_ff(A)^S;
+    X = simp_ff(A)^((S+1)/2);
+    U = 0;
+    B_pow = simp_ff(B);
+    while (B_pow != simp_ff(1)) {
+        B_pow = B_pow^2;
+        U++;
+    }
+
+        /* Step i */
+    while (U != 0) {
+        B = simp_ff(M)^(2^(R-U))*(B);
+        X = simp_ff(M)^(2^(R-U-1))*(X);
+        U = 0;
+        B_pow = simp_ff(B);
+        while (B_pow != simp_ff(1)) {
+            B_pow = B_pow^2;
+            U++;
+        }
+    }
+    return X;
+}
+
+
+/* compute square root of A in finite field
+    by finding a root of x^2-A */
+/*
+    Input:
+        A: integer.
+        Char: integer (prime),
+            characteristic of base field.
+    Output:
+        Sqrt: integer or string
+            if A is a quadratic residue, A = Sqrt^2 (mod Char),
+            otherwise, return "nonquad".
+*/
+def sqrt_ff_quadpoly(A, Char) {
+    /* set finite field */
+    setmod_ff(Char);
+    /* check x^2-A has roots */
+    F = simp_ff(x^2 - A);
+    Root = uniroot_ff(F,Char,1);
+    if (Root == "noroot") {
+        return "nonquad";
+    } else {
+        return simp_ff(Root);
+    }
+}
+
+
+/** main function **/
+/* count points over elliptic curve over Fq */
+/*
+    Input:
+        EC: vector (size: 2),
+                [a,b] are on (Fp)^2 and coefficients of elliptic curve over Fq,
+                i.e., weierstrass form of elliptic curve is y^2=x^3+a*x+b.
+        Char: integer (prime),
+                characteristic of base field.
+        Defpoly_FF: univariate polynomial over FF,
+                        definition polynomial of FF.
+                        if FF is prime field, then Defpoly_FF = x.
+    Output:
+        N: integer ( > 0 ),
+            the number of points on EC over FF.
+*/
+def schoof(EC, Char, Defpoly_FF) {
+    /* set finite field Fp */
+    setmod_ff(Char);
+    Q = Char^deg(Defpoly_FF,varz(Defpoly_FF));
+
+    /* coefficients of EC */
+    A = EC[0]; B = EC[1];
+    ECpoly = simp_ff(varz(Defpoly_FF)^3 + A*varz(Defpoly_FF) + B);
+
+    /* what we have to do is only finding T s.t. Q+1+T = 0 */
+    /* compute the range of T by Hasse's Theorem */
+    Range = 4*(isqrt(Q)+1);
+    /* compute Lm := min{prime L|\Pi_{prime \ell<=L}(\ell) > Range} */
+    /* make a list Prime_List = {2,3,..,Lm} */
+    M = 1;
+    L = 1;
+    Prime_List = [];
+    while (M < Range) {
+        L = pari(nextprime,L+1);
+        Prime_List = cons(L,Prime_List);
+        M = M*L;
+    }
+    Prime_List = reverse(Prime_List);
+    print("Prime_List = ",0)$print(Prime_List)$
+
+    /* compute TL = T (mod L) for each small prime L */
+    V = []; /* hold [TL1,L1], [TL2,L2],..,[TLm,Lm] */
+
+    /* Case1: L = 2 */
+    L = Prime_List[0];
+    print("L = ",0)$print(L)$
+    GCD = gcd(var(ECpoly)^Q-var(ECpoly),ECpoly);
+    if (deg(GCD,var(GCD)) == 0) {
+        /* if ECpoly has no roots in Fq */
+        TL = 1;
+    } else {
+        /* if ECpoly has at least one root in Fq */
+        TL = 0;
+    }
+    print(" TL = ",0)$print(TL)$
+    V = cons(newvect(2,[TL%L,L]),V);
+
+    /* compute a list of 2-th ~ (Lm+2)-th Divpoly's */
+    List_Divpoly = divpoly(Prime_List[length(Prime_List)-1]+2,EC,Char,1);
+    //print("List_Divpoly = ",0)$print(List_Divpoly)$
+
+    /* Case2: L > 2 */
+    /* in this case, we have to find TL
+        by computing Frob^2(P)+Q*P+TL*Frob(P) = 0, P in E[L] */
+    for (J = 1; J < length(Prime_List); J++) {
+        /* compute a point in E[L](Fp) */
+        L = Prime_List[J];
+        print("L = ",0)$print(L)$
+        QL = Q % L;
+        Divpoly = simp_ff(List_Divpoly[L]);
+        print("Divpoly = ",0)$print(Divpoly)$
+        /* check there is a point in E[L](Fp) */
+        Roots = uniroot_ff(Divpoly,Char,2);
+        print("Roots = ",0)$print(Roots)$
+        if (Roots == "noroot") {
+            Check_P = "nopoint";
+        } else {
+            Check_P = "nopoint";
+            for (I = 0; I < length(Roots); I++) {
+                Sqrt = sqrt_ff_quadpoly(subst(ECpoly,var(ECpoly),Roots[I]),Char);
+                //Sqrt = sqrt_ff_tonelli(subst(ECpoly,var(ECpoly),Roots[I]),Char,1);
+                if (Sqrt != "nonquad") {
+                    Check_P = [Roots[I],Sqrt];
+                    print("Check_P = ",0)$print(Check_P)$
+                    break;
+                } else {}
+            }
+        }
+        if (Check_P != "nopoint") {
+            /* Case3: E[L](Fp) != \emptyset */
+            /* in this case, we have to find TL
+                s.t. (Q+1+TL)*P = 0 (P in E[L]), that is, Q+1+TL = 0 mod L. */
+            print("Case3: there is at least one point in E[L](Fp).")$
+            /* compute LHS */
+            LHS = (QL+1)%L;
+            /* find TL s.t. Q+1+TL = 0 mod L */
+            for (I = 0; I < L; I++) {
+                if ((LHS+I)%L == 0) {
+                    TL = I; break;
+                } else {}
+            }
+        } else {
+            /* Case4: E[L](Fp) = \emptyset */
+            /* in this case, we have to find TL
+                s.t. Frob^2(P)+Q*P = -TL*Frob(P), P=(x,y) in E(Fp)\E[L]. */
+            print("Case4: there is no points in E[L](Fp).")$
+            /* compute LHS = (Frob^2)(P)+q*P */
+            P =  [var(Divpoly),1];
+            Frob_P   = [frob_x(P[0], Char, Defpoly_FF, Divpoly),
+                        frob_y(P[1], EC, Char, Defpoly_FF, Divpoly)];
+            Frob2_P = [frob_x(Frob_P[0], Char, Defpoly_FF, Divpoly),
+                        frob_y(Frob_P[1], EC, Char, Defpoly_FF, Divpoly)]; /* if using "subst", we cannot reduce by Divpoly */
+            print("Prime_List[length(Prime_List)-1] = ",0)$print(Prime_List[length(Prime_List)-1])$
+            QP =   [n_times_x(QL, EC, Char, Divpoly, List_Divpoly),
+                    n_times_y(QL, EC, Char, Divpoly, List_Divpoly)];
+            if (simp_ff(Frob2_P[0]) != simp_ff(QP[0])) {
+                /* Case5: (Frob^2)(P) != q*P and (Frob^2)(P) != -q*P */
+                print("Case5: (Frob^2)(P) != q*P and (Frob^2)(P) != -q*P.")$
+                LHS = add_x_y(Frob2_P[0],Frob2_P[1],QP[0],QP[1],EC,Char,Divpoly);
+                RHS = Frob_P;
+                for (I = 1; I < L; I++) {
+                    /* if (x-cood. of LHS) = (x-cood. of RHS) */
+                    if (simp_ff(LHS[0]) == simp_ff(RHS[0])) {
+                        /* if (y-cood. of LHS) = (y-cood. of RHS) */
+                        if (simp_ff(LHS[1]) == simp_ff(RHS[1])){
+                            TL = (-1)*I; break;
+                        } else {
+                            TL = I; break;
+                        }
+                    } else {
+                        /* if (x-cood. of LHS) != (x-cood. of RHS) */
+                        RHS = add_x_y(RHS[0],RHS[1],Frob_P[0],Frob_P[1],EC,Char,Divpoly);
+                    }
+                    if (I == L-1) {error("we could not find TL s.t. Frob^2(P)+Q*P = -TL*Frob(P).");}else{}
+                }
+            } else {
+                /* Case6: (Frob^2)(P) = Q*P or (Frob^2)(P) = -Q*P */
+                print("Case6: (Frob^2)(P) = Q*P or (Frob^2)(P) = -Q*P.")$
+                if (simp_ff(Frob2_P[1]) == simp_ff(QP[1])) {
+                    /* Case7: (Frob^2)(P) = Q*P */
+                    print("Case7: (Frob^2)(P) = Q*P.")$
+                    W = sqrt_ff_tonelli(Q,L,0); /* or use "sqrt_ff_quadpoly" */
+                    print("Now x(Frob(P)) = x(W*P). ",0)$
+                    print("QL = ",0)$print(QL,0)$
+                    print(", W = ",0)$print(W)$
+                    if (W == "nonquad") {error("we could not find a square root of Char mod L.");}
+                    /* if Frob(P) = W*P, TL = -2*W,
+                        else if Frob(P) = -W*P, TL = 2*W. */
+                    WPy = n_times_y(W, EC, Char, Divpoly);
+                    if (simp_ff(Frob_P[1]) == simp_ff(WPy)) {
+                        TL = -2*W;
+                    } else {
+                        TL = 2*W;
+                    }
+                } else {
+                    /* Case8: (Frob^2)(P) = -Q*P */
+                    print("Case8: (Frob^2)(P) = -Q*P.")$
+                    TL = 0;
+                }
+            }
+        }
+        print(" TL = ",0)$print(TL)$
+        V = cons(newvect(2,[TL,L]),V);
+    }
+
+    /* compute TM = T mod M by CRT */
+    print("V = ",0)$print(V)$
+    V = ltov(V);
+    CRT = crt(V);
+    TM = CRT[0];
+    print ("CRT = ",0)$print(CRT)$
+
+    /* compute T */
+    if (TM <= 2*isqrt(Q)) {
+        T = TM;
+    } else {
+        T = TM-CRT[1];
+    }
+    print("T = ",0)$print(T,0)$print(" mod ",0)$print(M)$
+
+    /* compute #E(Fq) by Hasse's Theorem */
+    N = Q + 1 + T;
+    return N;
+}
+
+
+
+/*** executing room ***/
+/* Example 3 */
+/* Input */
+Char = 1031$ /* prime */
+Defpoly_FF = x$
+EC = newvect(2,[11,3])$
+/* compute */
+N = schoof(EC,Char,Defpoly_FF)$
+/* Output */
+print("\nExample 3:")$
+print("Char = ",0)$print(Char)$
+print("Defpoly_FF =",0)$print(Defpoly_FF)$
+print("EC = ",0)$print(EC)$
+print("N = ",0)$print(N)$
+print("\n")$
+
+end$

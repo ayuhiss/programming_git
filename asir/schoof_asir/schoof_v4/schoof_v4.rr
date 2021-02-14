@@ -1,0 +1,206 @@
+/*** Schoof algorithm ***/
+/* only if the coefficients of EC
+    over finite field(Fq) are over base field(Fp) */
+/* ver 2: with precomputation division polynomials */
+/* ver 2-1: reduce x^N by division polynomial
+                to reduce repeating (in only "frob_x") */
+/* ver 3: fast exponential */
+/* ver 4: minor correction for a bug of the case L = 2 */
+
+
+/* load subprogram */
+load("subprogram.rr")$
+
+
+/** main function **/
+/* count points over elliptic curve over Fq */
+/*
+    Input:
+        EC: vector (size: 2),
+                [a,b] are on (Fp)^2 and coefficients of elliptic curve over Fq,
+                i.e., weierstrass form of elliptic curve is y^2=x^3+a*x+b.
+        Char: integer (prime),
+                characteristic of base field.
+        Defpoly_FF: univariate polynomial over FF,
+                        definition polynomial of FF.
+                        if FF is prime field, then Defpoly_FF = x.
+    Output:
+        N: integer ( > 0 ),
+            the number of points on EC over FF.
+*/
+def schoof(EC, Char, Defpoly_FF) {
+    /* set the order of finite field Fq */
+    Q = Char^deg(Defpoly_FF,varz(Defpoly_FF));
+
+    /* coefficients of EC */
+    A = EC[0]; B = EC[1];
+    ECpoly = (varz(Defpoly_FF)^3 + A*varz(Defpoly_FF) + B) % Char;
+
+    /* what we have to do is only finding T s.t. Q+1+T = 0 */
+    /* compute the range of T by Hasse's Theorem */
+    Range = 4*(isqrt(Q)+1);
+    /* compute Lm := min{prime L|\Pi_{prime \ell<=L}(\ell) > Range} */
+    /* make a list Prime_List = {2,3,..,Lm} */
+    M = 1;
+    L = 1;
+    Prime_List = [];
+    while (M < Range) {
+        L = pari(nextprime,L+1);
+        Prime_List = cons(L,Prime_List);
+        M = M*L;
+    }
+    Prime_List = reverse(Prime_List);
+    print("Prime_List = ",0)$print(Prime_List)$
+
+    /* compute TL = T (mod L) for each small prime L */
+    V = []; /* hold [TL1,L1], [TL2,L2],..,[TLm,Lm] */
+
+    /* Case: L = 2 */
+    L = Prime_List[0];
+    print("L = ",0)$print(L)$
+    /* check ECpoly has at least one root over Fq */
+    Root = uniroot_ff(ECpoly,Q,0); /* teh second input of "uniroot_ff" needs prime, but we cheat here */
+    if (Root == "noroot") {
+        /* if ECpoly has no roots in Fq */
+        TL = 1;
+    } else {
+        /* if ECpoly has at least one root in Fq */
+        TL = 0;
+    }
+    print(" TL = ",0)$print(TL)$
+    V = cons(newvect(2,[TL%L,L]),V);
+
+    /* compute a list of 2-th ~ (Lm+2)-th Divpoly's */
+    List_Divpoly = divpoly(Prime_List[length(Prime_List)-1]+2,EC,Char,1);
+
+    /* Case: L > 2 */
+    /* in this case, we have to find TL
+        by computing Frob^2(P)+Q*P+TL*Frob(P) = 0, P in E[L] */
+    for (J = 1; J < length(Prime_List); J++) {
+        /* compute a point in E[L](Fp) */
+        L = Prime_List[J];
+        print("L = ",0)$print(L)$
+        QL = Q % L;
+        Divpoly = (List_Divpoly[L]) % Char;
+        print("Divpoly = ",0)$print(Divpoly)$
+        /* check there is a point in E[L](Fp) */
+        Roots = uniroot_ff(Divpoly,Char,2);
+        print("Roots = ",0)$print(Roots)$
+        if (Roots == "noroot") {
+            Check_P = "nopoint";
+        } else {
+            Check_P = "nopoint";
+            for (I = 0; I < length(Roots); I++) {
+                Sqrt = sqrt_ff_quadpoly(subst(ECpoly,var(ECpoly),Roots[I]),Char);
+                //print("subst = ",0)$print(subst(ECpoly,var(ECpoly),Roots[I]))$
+                //print("subst % Char = ",0)$print((subst(ECpoly,var(ECpoly),Roots[I])) % Char)$
+                //Sqrt = sqrt_ff_tonelli(subst(ECpoly,var(ECpoly),Roots[I]),Char,1);
+                if (Sqrt != "nonquad") {
+                    Check_P = [Roots[I],Sqrt];
+                    print("Check_P = ",0)$print(Check_P)$
+                    break;
+                } else {}
+            }
+        }
+        if (Check_P != "nopoint") {
+            /* Case1: E[L](Fp) != \emptyset */
+            /* in this case, we have to find TL
+                s.t. (Q+1+TL)*P = 0 (P in E[L]), that is, Q+1+TL = 0 mod L. */
+            print("Case1: there is at least one point in E[L](Fp).")$
+            /* compute LHS */
+            LHS = (QL+1) % L;
+            /* find TL s.t. Q+1+TL = 0 mod L */
+            for (I = 0; I < L; I++) {
+                if ((LHS+I) % L == 0) {
+                    TL = I; break;
+                } else {}
+            }
+        } else {
+            /* Case2: E[L](Fp) = \emptyset */
+            /* in this case, we have to find TL
+                s.t. Frob^2(P)+Q*P = -TL*Frob(P), P=(x,y) in E(Fp)\E[L]. */
+            print("Case2: there is no points in E[L](Fp).")$
+            /* compute LHS = (Frob^2)(P)+q*P */
+            P = [var(Divpoly),1];
+            Frob_P   = [frob_x(P[0], Char, Defpoly_FF, Divpoly),
+                        frob_y(P[1], EC, Char, Defpoly_FF, Divpoly)];
+            Frob2_P = [frob_x(Frob_P[0], Char, Defpoly_FF, Divpoly),
+                        frob_y(Frob_P[1], EC, Char, Defpoly_FF, Divpoly)]; /* if using "subst", we cannot reduce by Divpoly */
+            QP =   [n_times_x(QL, EC, Char, Divpoly, List_Divpoly),
+                    n_times_y(QL, EC, Char, Divpoly, List_Divpoly)];
+            if (Frob2_P[0] != QP[0]) { /* over Fp */
+                /* Case3: (Frob^2)(P) != q*P and (Frob^2)(P) != -q*P */
+                print("Case3: (Frob^2)(P) != q*P and (Frob^2)(P) != -q*P.")$
+                print("1:fdighfdoghfdiohnbfidsgudiosahoapugdfisap")$
+                LHS = add_x_y(Frob2_P[0],Frob2_P[1],QP[0],QP[1],EC,Char,Divpoly);
+                print("2:fdighfdoghfdiohnbfidsgudiosahoapugdfisap")$
+                RHS = Frob_P;
+                for (I = 1; I < L; I++) {
+                    /* if (x-cood. of LHS) = (x-cood. of RHS) */
+                    if (LHS[0] == RHS[0]) { /* over Fp */
+                        /* if (y-cood. of LHS) = (y-cood. of RHS) */
+                        if (LHS[1] == RHS[1]){ /* over Fp */
+                            TL = (-1)*I; break;
+                        } else {
+                            TL = I; break;
+                        }
+                    } else {
+                        /* if (x-cood. of LHS) != (x-cood. of RHS) */
+                        print("3:fdighfdoghfdiohnbfidsgudiosahoapugdfisap")$
+                        RHS = add_x_y(RHS[0],RHS[1],Frob_P[0],Frob_P[1],EC,Char,Divpoly);
+                        print("4:fdighfdoghfdiohnbfidsgudiosahoapugdfisap")$
+                    }
+                    if (I == L-1) {error("we could not find TL s.t. Frob^2(P)+Q*P = -TL*Frob(P).");}else{}
+                }
+            } else {
+                /* Case4: (Frob^2)(P) = Q*P or (Frob^2)(P) = -Q*P */
+                print("Case4: (Frob^2)(P) = Q*P or (Frob^2)(P) = -Q*P.")$
+                if (Frob2_P[1] == QP[1]) { /* over Fp */
+                    /* Case5: (Frob^2)(P) = Q*P */
+                    print("Case5: (Frob^2)(P) = Q*P.")$
+                    W = sqrt_ff_tonelli(Q,L,0); /* or use "sqrt_ff_quadpoly" */
+                    print("Now x(Frob(P)) = x(W*P). ",0)$
+                    print("QL = ",0)$print(QL,0)$
+                    print(", W = ",0)$print(W)$
+                    if (W == "nonquad") {error("we could not find a square root of Char mod L.");}
+                    /* if Frob(P) = W*P, TL = -2*W,
+                        else if Frob(P) = -W*P, TL = 2*W. */
+                    WPy = n_times_y(W, EC, Char, Divpoly, List_Divpoly);
+                    if (Frob_P[1] == WPy) { /* over Fp */
+                        TL = -2*W;
+                    } else {
+                        TL = 2*W;
+                    }
+                } else {
+                    /* Case6: (Frob^2)(P) = -Q*P */
+                    print("Case6: (Frob^2)(P) = -Q*P.")$
+                    TL = 0;
+                }
+            }
+        }
+        print(" TL = ",0)$print(TL)$
+        V = cons(newvect(2,[TL,L]),V);
+    }
+
+    /* compute TM = T mod M by CRT */
+    print("V = ",0)$print(V)$
+    V = ltov(V);
+    CRT = crt(V);
+    TM = CRT[0];
+    print ("CRT = ",0)$print(CRT)$
+
+    /* compute T */
+    if (TM <= 2*isqrt(Q)) {
+        T = TM;
+    } else {
+        T = TM-CRT[1];
+    }
+    print("T = ",0)$print(T,0)$print(" mod ",0)$print(M)$
+
+    /* compute #E(Fq) by Hasse's Theorem */
+    N = Q + 1 + T;
+    return N;
+}
+
+
+end$

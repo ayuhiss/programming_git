@@ -1,0 +1,101 @@
+/* compute L-th "reduced" division polynomial of elliptic curve over finite field */
+/*
+    Input:
+        L: integer (>=3),
+                degree of div poly.
+        EC: vector (size: 2),
+                [a,b] are on (Fp)^2 and coefficients of elliptic curve over Fq,
+                i.e., weierstrass form of elliptic curve is y^2=x^3+a*x+b.
+        Char: integer (prime),
+                characteristic of base field.
+        Mode: 0 or 1,
+                you can choose between list or polynomial as output.
+    Output:
+        if Mode = 0,
+            Divpoly: univariate polynomial over FF,
+                    f_L which is L-th "reduced" division polynomial over FF,
+                    s.t. if P=(x,y) is in E[L] and not in E[2],
+                            then L*P=O if and only if f_L(x)=0.
+        if Mode = 1,
+            List: list (size: L+1)
+                    list of all the division polynomials of E,
+                    each rank of which is from 0 to L.
+                    however, 0-th one is 0, 1-st one is 1,
+                    2-nd one is 1.
+*/
+def divpoly(L, EC, Char, Mode) {
+    /* Caution: in the case that the caracteristic of this finite field Char
+        is enough small ((L^2-1)/2 >= Char), the degree of divpoly is larger
+        than Char, so you may have error some computation. */
+    if ((L^2-1)/2 >= Char) {
+        print("Caution: in the case that the caracteristic of
+        this finite field Char is enough small ((L^2-1)/2 >= Char),
+        the degree of divpoly is larger than Char, so you may have
+        error some computation.");
+    }
+
+    /* coefficients of EC */
+    A = EC[0];
+    B = EC[1];
+    ECpoly = (x^3 + A*x + B) % Char;
+
+    /* compute reduced division polynomial */
+    /* Case: L <= 2 */
+    if (L <= 2) {
+        error("you should not be L <= 2");
+    } else {}
+
+    /* Case: 2 < L <= 4 */
+    List_Divpoly = [
+        0 % Char,
+        1 % Char,
+        1 % Char,
+        (3*x^4+6*A*x^2+12*B*x-A^2) % Char,
+        (2*(x^6+5*A*x^4+20*B*x^3-5*A^2*x^2-4*A*B*x-8*B^2-A^3)) % Char
+    ];
+        /*output */
+    if (L <= 4) {
+        if (Mode == 0) {
+            return List_Divpoly[L];
+        } else {
+            return List_Divpoly;
+        }
+    } else {}
+
+    /* Case: L >= 5 */
+    Vec_Divpoly = newvect(L+1,List_Divpoly);
+    F_sq = (16*ECpoly^2) % Char;
+    N = 5;
+    while (N <= L) {
+        /* Case: N = 2M+1 */
+        if (N % 2 == 1) {
+            M = (N-1)/2;
+            /* Case: M is odd */
+            if (M % 2 == 1) {
+                Vec_Divpoly[N] = Vec_Divpoly[M+2]*Vec_Divpoly[M]^3
+                                    - F_sq*Vec_Divpoly[M-1]*Vec_Divpoly[M+1]^3;
+                Vec_Divpoly[N] = Vec_Divpoly[N] % Char;
+            } else { /* Case: M is even */
+                Vec_Divpoly[N] = F_sq*Vec_Divpoly[M+2]*Vec_Divpoly[M]^3
+                                    - Vec_Divpoly[M-1]*Vec_Divpoly[M+1]^3;
+                Vec_Divpoly[N] = Vec_Divpoly[N] % Char;
+            }
+        } else {
+            /* Case: N = 2M */
+            M = N/2;
+            Vec_Divpoly[N] = (Vec_Divpoly[M+2]*Vec_Divpoly[M-1]^2
+                                - Vec_Divpoly[M-2]*Vec_Divpoly[M+1]^2)*Vec_Divpoly[M];
+            Vec_Divpoly[N] = Vec_Divpoly[N] % Char;
+        }
+        N++;
+    }
+    /* Output */
+    if (Mode == 0) {
+        return Vec_Divpoly[L];
+    } else {
+        return vtol(Vec_Divpoly);
+    }
+}
+
+
+end$

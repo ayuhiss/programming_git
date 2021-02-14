@@ -1,0 +1,225 @@
+/* compute Frobenius map from P = (X(x),y*Y(x)) */
+/*
+    Input:
+        X: univariate polynomial,
+            X(x) is the polynomial which represents the x-coodinate of P.
+        Char: integer (prime),
+                characteristic of base field.
+        Defpoly_FF: univariate polynomial over FF,
+                        definition polynomial of FF.
+                        if FF is prime field, then Defpoly_FF = x.
+        R: univariate polynomial over Fp.
+    Output:
+        Xqn: univariate polynomial over Fp.
+                Frob(P) = (Xqn(x),y*Yqn(x))
+*/
+def frob_x(X, Char, Defpoly_FF, R) {
+    /* set finite field */
+    setmod_ff(Char);
+    /* compute order of field */
+    Order = Char^deg(Defpoly_FF,varz(Defpoly_FF));
+    /* reduce x^Order by R to reduce repeating */
+    Red_x_Order = urem(simp_ff(varz(X)^Order),simp_ff(R));
+    /* compute X^Order using reduced x^Order */
+    X_exp_Q = subst(Red_x_Order,varz(Red_x_Order),X);
+    X_exp_Q = urem(simp_ff(X_exp_Q),simp_ff(R));
+    return simp_ff(X_exp_Q);
+}
+
+
+/* compute Frobenius map from P = (X(x),y*Y(x)) */
+/*
+    Input:
+        Y: univariate polynomial,
+            Y(x) is the polynomial which represents the y-coodinate of P.
+        EC: vector (size: 2),
+                [a,b] are on (Fp)^2 and coefficients of elliptic curve over Fq,
+                i.e., weierstrass form of elliptic curve is y^2=x^3+a*x+b.
+        Char: integer (prime),
+                characteristic of base field.
+        Defpoly_FF: univariate polynomial over FF,
+                        definition polynomial of FF.
+                        if FF is prime field, then Defpoly_FF = x.
+        R: univariate polynomial over Fp.
+    Output:
+        Yqn: univariate polynomial over Fp.
+                Frob(P) = (Xqn(x),y*Yqn(x))
+*/
+/* We want to rewrite this code to use reduced y^((q-1)/2)*x^q by R,
+    However I can't reduce y^((q-1)/2) by R */
+def frob_y(Y, EC, Char, Defpoly_FF, R) {
+    /* set finite field */
+    setmod_ff(Char);
+    /* compute order of field */
+    Order = Char^deg(Defpoly_FF,varz(Defpoly_FF));
+
+    /* compute exp(y*Y,Order) = y*exp(ECpoly,(Order-1)/2)*exp(Y,Order) */
+    ECpoly = simp_ff(varz(Y)^3+EC[0]*varz(Y)+EC[1]);
+    Yp_y = fast_exp_mod(simp_ff(ECpoly),(Order-1)/2,simp_ff(R),1);
+    Yp_Y = fast_exp_mod(simp_ff(Y),Order,simp_ff(R),1);
+    Yp = urem(simp_ff(Yp_y*Yp_Y),simp_ff(R));
+    return simp_ff(Yp);
+}
+
+
+/* compute X(x), which represent (X(x),y*Y(x)) = n*(x,y) over Fp[x]/<R(x)> */
+/*
+    Input:
+        N: integer (>= 1).
+        EC: vector (size: 2),
+                [a,b] are on (Fp)^2 and coefficients of elliptic curve over Fq,
+                i.e., weierstrass form of elliptic curve is y^2=x^3+a*x+b.
+        Char: integer (prime),
+                characteristic of base field.
+        R: univariate polynomial over Fp,
+            {the roots of R} \cap {the root of N-th divpoly} = \emptyset.
+        List_Divpoly: list (size: L+1)
+                    list of all the division polynomials of E,
+                    each rank of which is from 0 to L.
+                    however, 0-th one is 0, 1-st one is 1,
+                    2-nd one is 1.
+    Output:
+        X: univariate polynomial over Fp.
+*/
+def n_times_x (N, EC, Char, R, List_Divpoly) {
+    /* set finite field */
+    setmod_ff(Char);
+    /* if N = 1 */
+    if (N == 1) {
+        return simp_ff(varz(R));
+    } else {}
+
+    /* if N >= 2 */
+    ECpoly = simp_ff(varz(R)^3+EC[0]*varz(R)+EC[1]);
+    /* compute division polynomials */
+    Vec_Divpoly = ltov(List_Divpoly);
+    /* if N is even */
+    if (N % 2 == 0) {
+        /*
+        X = varz(R) - (1/4)*Vec_Divpoly[N+1]*Vec_Divpoly[N-1]
+                        *inv_unipoly(ECpoly*(Vec_Divpoly[N]^2),R,Char);
+        */
+        X = varz(R) - (1/4)*urem(Vec_Divpoly[N+1]*Vec_Divpoly[N-1],R)
+                        *inv_unipoly(ECpoly*urem(Vec_Divpoly[N]^2,R),R,Char);
+        X = urem(X,R);
+    } else { /* if N is odd */
+        /*
+        X = varz(R) - 4*Vec_Divpoly[N+1]*Vec_Divpoly[N-1]
+                        *ECpoly*inv_unipoly(Vec_Divpoly[N]^2,R,Char);
+        */
+        X = varz(R) - 4*urem(Vec_Divpoly[N+1]*Vec_Divpoly[N-1],R)
+                        *ECpoly*inv_unipoly(urem(Vec_Divpoly[N]^2,R),R,Char);
+        X = urem(X,R);
+    }
+    return simp_ff(X);
+}
+
+
+/* compute Y(x), which represent (X(x),y*Y(x)) = n*(x,y) over Fp[x]/<R(x)> */
+/*
+    Input:
+        N: integer (>= 1).
+        EC: vector (size: 2),
+                [a,b] are on (Fp)^2 and coefficients of elliptic curve over Fq,
+                i.e., weierstrass form of elliptic curve is y^2=x^3+a*x+b.
+        Char: integer (prime),
+                characteristic of base field.
+        R: univariate polynomial over Fp.
+        List_Divpoly: list (size: L+1)
+                    list of all the division polynomials of E,
+                    each rank of which is from 0 to L.
+                    however, 0-th one is 0, 1-st one is 1,
+                    2-nd one is 1.
+    Output:
+        Y: univariate polynomial over Fp.
+*/
+def n_times_y (N, EC, Char, R, List_Divpoly) {
+    /* set finite field */
+    setmod_ff(Char);
+    /* if N = 1 */
+    if (N == 1) {
+        return simp_ff(1);
+    } else {}
+
+    /* if N >= 2 */
+    ECpoly = simp_ff(varz(R)^3+EC[0]*varz(R)+EC[1]);
+    /* compute division polynomials */
+    Vec_Divpoly = ltov(List_Divpoly);
+    /* if N is even */
+    if (N % 2 == 0) {
+        /*
+        Y = (1/16)*(Vec_Divpoly[N+2]*Vec_Divpoly[N-1]^2-Vec_Divpoly[N-2]*Vec_Divpoly[N+1]^2)
+                    *inv_unipoly(ECpoly^2*Vec_Divpoly[N]^3,R,Char);
+        */
+        Y = (1/16)*urem(Vec_Divpoly[N+2]*urem(Vec_Divpoly[N-1]^2,R)-Vec_Divpoly[N-2]*urem(Vec_Divpoly[N+1]^2,R),R)
+                    *inv_unipoly(ECpoly^2*urem(Vec_Divpoly[N]*urem(Vec_Divpoly[N]^2,R),R),R,Char);
+        Y = urem(Y,R);
+    } else { /* if N is odd */
+        /*
+        Y = urem((urem(urem(Vec_Divpoly[N+2],R)*urem(Vec_Divpoly[N-1]^2,R),R)-urem(urem(Vec_Divpoly[N-2],R)*urem(Vec_Divpoly[N+1]^2,R),R))
+                        *inv_unipoly(Vec_Divpoly[N]*urem(Vec_Divpoly[N]^2,R),R,Char)
+                    ,R);
+        */
+        Y = urem(Vec_Divpoly[N+2]*urem(Vec_Divpoly[N-1]^2,R)-Vec_Divpoly[N-2]*urem(Vec_Divpoly[N+1]^2,R),R)
+                *inv_unipoly(Vec_Divpoly[N]*urem(Vec_Divpoly[N]^2,R),R,Char);
+        Y = urem(Y,R);
+    }
+    return simp_ff(Y);
+}
+
+
+/* compute XS(x),YS(x) which satisfy (XS(x),y*YS(x)) = (XP(x),y*YP(x)) + (XQ(x),y*YQ(x)).
+    in this time, P=(XP,YP) and Q=(XQ,YQ) are in E[L], L is not 2. */
+/*
+    Input:
+        XP: univariate polynomial,
+            XP(x) is the polynomial which represents the x-coodinate of P.
+        YP: univariate polynomial,
+            YP(x) is the polynomial which represents the y-coodinate of P.
+        XQ: univariate polynomial,
+            XQ(x) is the polynomial which represents the x-coodinate of Q.
+        YQ: univariate polynomial,
+            YQ(x) is the polynomial which represents the y-coodinate of Q.
+        EC: vector (size: 2),
+                [a,b] are on (Fp)^2 and coefficients of elliptic curve over Fq,
+                i.e., weierstrass form of elliptic curve is y^2=x^3+a*x+b.
+        Char: integer (prime),
+                characteristic of base field.
+        R: univariate polynomial over Fp.
+    Output:
+        XS: univariate polynomial,
+            XS(x) is the polynomial which represents the x-coodinate of S = P + Q.
+        YS: univariate polynomial,
+            YS(x) is the polynomial which represents the y-coodinate of S = P + Q.
+*/
+def add_x_y(XP,YP,XQ,YQ,EC,Char,R) {
+    /* set finite field */
+    setmod_ff(Char);
+
+    ECpoly = simp_ff(x^3+EC[0]*x+EC[1]);
+    Xp = urem(simp_ff(XP),simp_ff(R));
+    Yp = urem(simp_ff(YP),simp_ff(R));
+    Xq = urem(simp_ff(XQ),simp_ff(R));
+    Yq = urem(simp_ff(YQ),simp_ff(R));
+
+    /* if P = Q */
+    if (Xp == Xq && Yp == Yq) {
+        Lambda = simp_ff((3*Xp^2+EC[0])*(1/2)*inv_unipoly(Yp,simp_ff(R),Char));
+        XS = urem(Lambda^2,simp_ff(R))*inv_unipoly(ECpoly,simp_ff(R),Char)-2*Xp;
+        XS = urem(simp_ff(XS),simp_ff(R));
+        YS = Lambda*(Xp-XS)*inv_unipoly(ECpoly,simp_ff(R),Char)-Yp;
+        YS = urem(simp_ff(YS),simp_ff(R));
+    } else {
+        /* if P != Q */
+        Lambda = simp_ff((Yq-Yp)*inv_unipoly(Xq-Xp,simp_ff(R),Char));
+        Lambda = urem(Lambda,simp_ff(R));
+        XS = urem(Lambda^2,simp_ff(R))*ECpoly-Xq-Xp;
+        XS = urem(simp_ff(XS),simp_ff(R));
+        YS = Lambda*(Xp-XS)-Yp;
+        YS = urem(simp_ff(YS),simp_ff(R));
+    }
+    return [simp_ff(XS),simp_ff(YS)];
+}
+
+
+end$

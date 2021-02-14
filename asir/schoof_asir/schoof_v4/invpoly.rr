@@ -1,0 +1,145 @@
+/* extended Euclid algorithm for integer*/
+/*
+    Input:
+        A: integer.
+        B: integer.
+    Output:
+        V: vector (size: 3),
+            V=(Z,X,Y) s.t. A*X+B*Y=Z=GCD(A,B).
+*/
+def ext_igcd (A, B) {
+    R1 = A;
+    X1 = 1;
+    X2 = 0;
+    R2 = B;
+    X2 = 0;
+    Y2 = 1;
+    while (R2 != 0) {
+        R3 = R1 % R2;
+        Q = idiv(R1, R2);
+        X3 = X1 - Q * X2;
+        Y3 = Y1 - Q * Y2;
+        R1 = R2;
+        R2 = R3;
+        X1 = X2;
+        X2 = X3;
+        Y1 = Y2;
+        Y2 = Y3;
+    }
+    return newvect(3,[R1, X1, Y1]);
+}
+
+
+/* Chinese Remainder Theory */
+/*
+    Input:
+        V: vector,
+            V = [[a1 n1] [a2 n2] ... [am nm]],
+            each (ni,nj) is coprime,
+            we solve equations that x1 = a1 (mod n1),..,xm = am (mod nm).
+    Output:
+        S: vector (size: 2),
+            S = [as ns], as is the root of the equations,
+            ns is n1*n2*...*nm.
+*/
+def crt (V) {
+    A1 = V[0][0];
+    N1 = V[0][1];
+    for ( I = 0; I+1 < length(V); I++) {
+        A2 = V[I+1][0];
+        N2 = V[I+1][1];
+        EEA = ext_igcd(N1,N2);
+        N3 = N1*N2;
+        A3 = (A1*N2*EEA[2]+A2*N1*EEA[1])%N3;
+        A1 = A3;
+        N1 = N3;
+    }
+    return newvect(2,[A1%N1,N1]);
+}
+
+
+/* extended Euclid algorithm for unipoly over Fp */
+/*
+    Input:
+        A: univariate polynomial over Fp.
+        B: univariate polynomial over Fp.
+        Char: integer (prime),
+                characteristic of base field.
+    Output:
+        V: vector (size: 3),
+            V=(Z,X,Y) s.t. A*X+B*Y=Z=GCD(A,B).
+*/
+def ext_ugcd (A, B, Char) {
+    setmod_ff(Char);
+    R1 = simp_ff(A);
+    X1 = simp_ff(1);
+    X2 = simp_ff(0);
+    R2 = simp_ff(B);
+    X2 = simp_ff(0);
+    Y2 = simp_ff(1);
+    while (R2 != simp_ff(0)) {
+        Sqr = sqr(R1,R2);
+        Q  = Sqr[0];
+        R3 = Sqr[1];
+        X3 = X1 - Q * X2;
+        Y3 = Y1 - Q * Y2;
+        R1 = R2;
+        R2 = R3;
+        X1 = X2;
+        X2 = X3;
+        Y1 = Y2;
+        Y2 = Y3;
+    }
+    return newvect(3,[R1, X1, Y1]);
+}
+
+
+/* compute inverse of A(X) over Fp[X]/<R(X)> */
+/*
+    Input:
+        Char: integer (prime),
+                characteristic of base field.
+        R: univariate polynomial over Fp.
+        A: univariate polynomial over Fp.
+    Output:
+        B: univariate polynomial over Fp.
+            if there exist the inverse of A,
+                then output is B such that A*B = 1.
+            otherwise, that is GCD(A(X),R(X)) = 1,
+                output is "noinverse".
+*/
+def inv_unipoly (A, R, Char) {
+    setmod_ff(Char);
+    /* check that there exist the inverse of A,
+        that is, check that GCD(A(X),R(X)) = 1 */
+    V = ext_ugcd(R,A,Char);
+    if (deg(simp_ff(V[0]),varz(simp_ff(V[0]))) > 0) {
+        return "noinverse";
+    } else {
+        return simp_ff(V[2])/simp_ff(V[0]);
+    }
+}
+
+
+/* compute x^N over Fp[x]/<F(X)>. */
+/* non-used */
+/*
+    Input:
+        Char: integer (prime),
+                characteristic of base field.
+        N: integer.
+        F: univariate polynomial over Fp.
+    Output:
+        R: univariate polynomial over Fp.
+            R is equal to x^N reduced by F(X).
+*/
+def red_xN_by_F (N, F, Char) {
+    /* set finite field */
+    setmod_ff(Char);
+    /* compute reducing */
+    R = urem(simp_ff(varz(F)^N), simp_ff(F));
+    return R;
+}
+
+
+end$

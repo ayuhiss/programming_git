@@ -1,0 +1,44 @@
+/*** Schoof algorithm ***/
+/* only if the coefficients of EC
+    over finite field(Fq) are over base field(Fp) */
+/* ver 2: with precomputation division polynomials */
+/* ver 2-1: reduce x^N by division polynomial
+                to reduce repeating (in only "frob_x") */
+/* ver 3: fast exponential */
+/* ver 4: minor correction for a bug of the case L = 2 */
+
+/** sub function **/
+/* improve function "var" and "vars" */
+/*
+    Input:
+        F: polynomial
+    Output:
+        M: monopolynomial
+*/
+def varz(F) {
+    if (var(F) == 0) { return x; }
+    else { return var(F);}
+}
+def varsz(F) {
+    if (vars(F) == []) { return [x]; }
+    else { return vars(F);}
+}
+
+
+/* compute L-th "reduced" division polynomial of elliptic curve over finite field */
+load("divpoly.rr")$
+
+/* compute A^N and N*P */
+load("fast_exp_multi.rr")$
+
+/* compute invpoly */
+load("invpoly.rr")$
+
+/* compute Frobenius, add, n-times */
+load("frobenius.rr")$
+
+/* compute sqrt and root */
+load("sqrt.rr")$
+
+
+end$
