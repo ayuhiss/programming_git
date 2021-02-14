@@ -1,0 +1,17 @@
+1. Download git client from Git (git-scm.com)
+2. in git bash clone the git repo
+	a. git -c http.sslVerify=false clone https://gitlab.pjhjkc1c.dadock.net/amandal/vdf-distributed-setup.git
+
+	b. It should prompt for username password
+3. Change Directory (cd) to cloned folder
+4. Make changes to files
+5. To add new files or add changed files to commit list run from inside the folder in git bash
+	a. git add newfile/changedfile
+6. Actually, commit the changes to local git repo
+	a. git commit -m "commit message"
+7. Push the changes to server
+	a. git -c http.sslVerify=false push
+	b. It should prompt for username password
+8. Pull changes from server
+	a. git -c http.sslVerify=false pull
+	b. It should prompt for username password
